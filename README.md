@@ -28,6 +28,8 @@
 ---
 
 ## 📂 Project Structure
+
+```
 RAG-Enhanced-Chatbot-with-LoRA-Fine-Tuning/
 ├── data_ingestion/          # Document parsing and preprocessing
 ├── chunking/                # Context-aware document chunking
@@ -36,9 +38,12 @@ RAG-Enhanced-Chatbot-with-LoRA-Fine-Tuning/
 ├── generator/               # LLM generation with context
 ├── finetuning/              # LoRA fine-tuning scripts
 ├── api/                     # REST or chat API integration
+├── requirements.txt         # Python dependencies
 └── README.md                # Project overview and instructions
+```
 
 ---
+
 ## ✅ Use Cases
 
 - 💬 Customer support chatbots with company-specific knowledge
@@ -50,15 +55,56 @@ RAG-Enhanced-Chatbot-with-LoRA-Fine-Tuning/
 
 ## 🧪 Getting Started
 
-1. **Clone the repository**:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/yourusername/RAG-Enhanced-Chatbot-with-LoRA-Fine-Tuning.git
    cd RAG-Enhanced-Chatbot-with-LoRA-Fine-Tuning
    ```
-2. Install dependencies:
-  ```bash
+
+2. **Install dependencies:**
+   ```bash
    pip install -r requirements.txt
-  ```
-3. Prepare your documents in the /data_ingestion/ directory.
-4. Run the ingestion pipeline to chunk and embed your documents.
-5. Launch the chatbot (with or without an API/UI) and start chatting!
+   ```
+
+3. **Prepare your documents** in the `/data_ingestion/` directory.
+
+4. **Run the ingestion pipeline** to chunk and embed your documents.
+
+5. **Launch the chatbot** (with or without an API/UI) and start chatting!
+
+---
+
+## 📋 Prerequisites
+
+- Python 3.8+
+- CUDA-compatible GPU (recommended for LoRA fine-tuning)
+- Sufficient storage for vector embeddings and model weights
+
+---
+
+## 🔧 Configuration
+
+Before running the project, configure the following:
+
+- Set your API keys for embedding services (OpenAI, Hugging Face)
+- Choose your preferred vector database (FAISS for local, Pinecone/Chroma for cloud)
+- Select the base language model for fine-tuning
+- Adjust chunking parameters based on your document types
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+---
+
+## 📞 Support
+
+If you encounter any issues or have questions, please open an issue on GitHub or contact the maintainer.
