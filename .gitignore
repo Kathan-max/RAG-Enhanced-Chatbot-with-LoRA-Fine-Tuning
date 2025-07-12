@@ -1,1 +1,3 @@
 /backend/.env
+/frontend/electric-rag/node_modules
+/backend/logs

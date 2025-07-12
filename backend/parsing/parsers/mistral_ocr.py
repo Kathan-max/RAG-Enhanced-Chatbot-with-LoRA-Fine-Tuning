@@ -13,129 +13,156 @@ from utils.logger import Logger
 import fitz
 import uuid
 from tqdm import tqdm
+from mistralai.extra import response_format_from_pydantic_model
+from enum import Enum
+from pydantic import BaseModel, Field
 
 
 load_dotenv(dotenv_path='././.env')
 
-class MistralOCR:
+class ImageType(str, Enum):
+    GRAPH = "graph"
+    TEXT = "text"
+    TABLE = "table"
+    IMAGE = "image"
+
+class Image(BaseModel):
+    image_type: ImageType = Field(..., description="The type of the image. Must be one of 'graph', 'text', 'table' or 'image'.")
+    description: str = Field(..., description="A description of the image.")
     
+class Document(BaseModel):
+    language: str = Field(..., description="The language of the document in ISO 639-1 code format (e.g., 'en', 'fr').")
+    summary: str = Field(..., description="A summary of the document.")
+    authors: list[str] = Field(..., description="A list of authors who contributed to the document.")
+
+
+class MistralOCR:
+
     def __init__(self, **kwargs):
-        self.chunk_length = kwargs.get('chunk_length', DEFAULT_CHUNK_LENGTH) # in terms of tokens
-        self.over_lap = kwargs.get('over_lap', DEFAULT_OVER_LAP) 
         self.client = Mistral(api_key=os.getenv('MISTRAL_API_KEY'))
         self.ocr_model = os.getenv('MISTRAL_MODEL')
-        self.logger = Logger(name = "RAGLogger").get_logger()
-        
-    def encodePdf(self, pdf_path):
-        try:
-            with open(pdf_path, "rb") as pdf_file:
-                return base64.b64encode(pdf_file.read()).decode('utf-8')
-        except FileNotFoundError:
-            self.logger.error(f"Error, file not found at the path: {pdf_path}")
-            return None
-        except Exception as e:
-            self.logger.error(f"Error: {e}")
-            return None
-    
+        self.logger = Logger(name="RAGLogger").get_logger()
+
     def requestOcrModel(self, base64_pdf):
-        # base64_pdf = self.encode_pdf(pdf_path)
         if not base64_pdf:
+            self.logger.warning("Empty Base64 PDF string received for OCR.")
             return {}
-        
+
+        self.logger.info("Sending request to Mistral OCR API...")
         pdf_response = self.client.ocr.process(
             model=self.ocr_model,
             document={
                 "type": "document_url",
                 "document_url": f"data:application/pdf;base64,{base64_pdf}"
             },
-            include_image_base64=True
+            bbox_annotation_format=response_format_from_pydantic_model(Image),
+            document_annotation_format=response_format_from_pydantic_model(Document),
+            include_image_base64=True,
         )
-        
+
+        self.logger.info("Received response from Mistral OCR API.")
         return json.loads(pdf_response.model_dump_json())
-    
-    
-    # def save_json(self, json_response, output_json_path):
-        
-    #     with open(output_json_path, 'w', encoding="utf-8") as f:
-    #         json.dump(json_response, f, indent=4)
-    
+
     def processFileChunks(self, base64_dict_list):
         final_mistral_results = []
-        document_chunk_annotations = []
+        document_chunk_annotations = {}
+
+        self.logger.info(f"Processing {len(base64_dict_list)} file chunks...")
+
         for base64_obj in tqdm(base64_dict_list, total=len(base64_dict_list), desc="Parsing Documents: "):
+            self.logger.debug(f"Processing chunk from page {base64_obj['start_page']} to {base64_obj['end_page']}...")
             ocr_response_json = self.requestOcrModel(base64_obj['base64_str'])
-            if not "pages" in ocr_response_json:
+
+            if "pages" not in ocr_response_json:
+                self.logger.warning(f"No pages found in OCR response for chunk: {base64_obj['file_chunk_id']}")
                 continue
+
             pages_list = ocr_response_json['pages']
             for idx, page in enumerate(pages_list):
                 pages_list[idx]['index'] = idx + base64_obj['start_page']
                 pages_list[idx]['file_chunk_id'] = base64_obj['file_chunk_id']
-                
-                
+
             final_mistral_results.extend(pages_list)
+
             if "document_annotation" in ocr_response_json:
-                document_chunk_annotations[base64_obj["file_chunk_id"]] = ocr_response_json["document_annotation"]
+                document_chunk_annotations[base64_obj["file_chunk_id"]] = json.loads(ocr_response_json["document_annotation"])
+
+        self.logger.info("Finished processing all file chunks.")
         return final_mistral_results, document_chunk_annotations
-        
-    def formatFileMetadata(self, file_metadata):
+
+    def formatFileMetadata(self, metadata, filename, extension):
+        self.logger.info("Formatting file-level metadata...")
         return {
-            "title": metadata.get("title"),
+            "title": filename,
+            "extension": extension,
             "author": metadata.get("author"),
             "subject": metadata.get("subject"),
             "keywords": metadata.get("keywords"),
             "creator": metadata.get("creator"),
             "producer": metadata.get("producer"),
-            "creation_date": metadata.get("creationDate"),
-            "mod_date": metadata.get("modDate"),
-            "page_count": page_count
         }
-    
+
     def splitFiles(self, pdf_path):
+        self.logger.info(f"Splitting PDF: {pdf_path}")
         doc = fitz.open(pdf_path)
+        filename = os.path.basename(pdf_path).split(".")[0]
+        extension = os.path.basename(pdf_path).split(".")[1]
         metadata = doc.metadata
-        
+        file_metadata = self.formatFileMetadata(metadata, filename, extension)
         total_pages = len(doc)
         base64_chunks = []
         pages_per_chunk = PDF_SPLIT_SIZE
-        
-        
+
+        self.logger.info(f"Total pages in PDF: {total_pages}. Splitting into chunks of {pages_per_chunk} pages...")
+
         for start_page in range(0, total_pages, pages_per_chunk):
-            end_page = min(start_page+pages_per_chunk - 1, total_pages - 1)
+            end_page = min(start_page + pages_per_chunk - 1, total_pages - 1)
+            self.logger.debug(f"Creating chunk: pages {start_page} to {end_page}")
             new_doc = fitz.open()
-            new_doc.insert_pdf(doc, from_page = start_page, to_page = end_page)
-            
+            new_doc.insert_pdf(doc, from_page=start_page, to_page=end_page)
+
             pdf_bytes = new_doc.write()
             base64_str = base64.b64encode(pdf_bytes).decode('utf-8')
             base64_chunks.append(
                 {
                     "file_chunk_id": str(uuid.uuid4()),
-                    "start_page":start_page,
+                    "start_page": start_page,
                     "end_page": end_page,
                     "base64_str": base64_str,
                 }
             )
             new_doc.close()
-        doc.close()
-        return base64_chunks
-            
-    
-    def formatJsonList(self, file_metadata, final_mistral_results):
-        
-        pass        
-    
-    
-    def extractInfo(self, pdf_path, save_json = False, output_json_path = ""):
-        file_metadata = self.getFileMetadata(pdf_path)
-        base64_dict_list = self.splitFiles(pdf_path)
-        final_mistral_results, document_chunk_annotations = self.processFileChunks(base64_dict_list)
-        final_json_output = self.formatJsonList(file_metadata, final_mistral_results)
-        if save_json:
-            self.saveJsonFile(output_json_path)
-        return final_json_output
 
-# if __name__ == "__main__":
-    
-#     pdf_path = "F://RAG//backend//data//raw_document_data//mistral7b.pdf"
-#     ocr = MistralOCR()
-#     json_output = ocr.request_ocr_model(pdf_path)
-#     ocr.save_json(json_output, 'F://RAG//backend//data//raw_document_data//output.json')
+        doc.close()
+        self.logger.info("Finished splitting PDF into base64 chunks.")
+        return file_metadata, base64_chunks
+
+    def formatJsonList(self, file_metadata, final_mistral_results, document_chunk_annotations):
+        self.logger.info("Formatting final JSON output...")
+        return {
+            "file_metadata": file_metadata,
+            "ocr_results": final_mistral_results,
+            "document_annotations": document_chunk_annotations
+        }
+
+    def saveJsonFile(self, data, output_path, indent=4):
+        self.logger.info(f"Saving JSON to: {output_path}")
+        with open(output_path, 'w') as f:
+            json.dump(data, f, indent=indent)
+        self.logger.info(f"Saved the file successfully: {output_path}")
+
+    def extractInfo(self, pdf_path, save_json=False, output_json_path=""):
+        self.logger.info(f"Starting document parsing for: {pdf_path}")
+        file_metadata, base64_dict_list = self.splitFiles(pdf_path)
+
+        self.logger.info("Sending file chunks to OCR model...")
+        final_mistral_results, document_chunk_annotations = self.processFileChunks(base64_dict_list)
+
+        final_json_output = self.formatJsonList(file_metadata, final_mistral_results, document_chunk_annotations)
+
+        if save_json and output_json_path != "":
+            self.logger.info("Saving OCR result to JSON...")
+            self.saveJsonFile(final_json_output, output_json_path)
+
+        self.logger.info("Document parsing complete.")
+        return final_json_output
