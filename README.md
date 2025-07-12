@@ -4,6 +4,15 @@
 
 **RAG-Enhanced-Chatbot-with-LoRA-Fine-Tuning** is a Retrieval-Augmented Generation (RAG) based chatbot that leverages external knowledge sources and enhances generation quality using LoRA fine-tuning. It enables efficient domain-specific adaptation of large language models while combining it with semantic search for grounded, accurate, and context-rich responses.
 
+## UI
+# Chat UI
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/d6aba562-ad12-4492-9672-07d42c2bb119" />
+
+
+# Document Ingestion
+<img width="1919" height="1078" alt="image" src="https://github.com/user-attachments/assets/edb0ec8d-9d29-49f1-b64d-4d18e4e88f48" />
+
+
 ---
 
 ## 🚀 Key Features
