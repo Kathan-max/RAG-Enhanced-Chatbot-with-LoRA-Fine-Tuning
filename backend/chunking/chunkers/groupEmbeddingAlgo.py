@@ -335,7 +335,7 @@ class GroupEAlgo:
                 return []
             
             doc = self.nlp(chunk)
-            entities = [ent.text for ent in doc.ents if ent.text not in ["\\in", "###", "$", "|", "$ | $"]]
+            entities = [ent.text for ent in doc.ents if ent.text not in ENTITIES_TO_IGNORE]
             
             self.logger.debug("Detected %d entities in chunk", len(entities))
             return entities

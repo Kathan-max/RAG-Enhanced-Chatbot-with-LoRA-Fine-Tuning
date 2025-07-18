@@ -30,6 +30,12 @@ TEMP_FILES_DOC = "F://RAG//backend//data//raw_document_data//"
 TEMP_FILES_JSONS = "F://RAG//backend//data//raw_jsons//"
 TOP_K = 7
 SIMILARITY_TH = 0.5
+ENTITIES_TO_IGNORE = ["\\in", "###", "$", "|", "$ | $"]
+RERANKING_PARAMETERS_PERCENT = {
+    'tfidf': 20,
+    'kw': 30,
+    'vec_sim': 50
+}
 # MIN_TABLES_COUNT = 1
 # MIN_IMAGES_COUNT = 1
 # UNREAD_DATA_DIR_PATH = 'data/raw_pdfs/unRead'
