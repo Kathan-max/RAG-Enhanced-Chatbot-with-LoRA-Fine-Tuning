@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from ingestion.ingestion import Ingestaion
 from embedding.encoder import Encoder
 from config.settings import *
+from retriever.retriever import Retriever
 
 app = FastAPI(title="LLM Chat Application API", version="1.0.0")
 
@@ -47,10 +48,19 @@ ingestion_obj = Ingestaion(parser = os.getenv("PARSER"),
                  chunker = os.getenv("CHUNKER"),
                  encoder = Encoder(encoder_name = os.getenv("ENCODER_NAME"),
                                    model_name = os.getenv("ENCODING_MODEL")))
+# retriever = 
 
 @app.get("/")
 async def root():
     return {"message": "LLM Chat Application API is running"}
+
+"""
+class ChatRequest(BaseModel):
+    query: str
+    multiLLM: bool
+    activeLLMs: List[str] = []
+    expertLLM: Optional[str] = None
+"""
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
@@ -58,8 +68,7 @@ async def chat_endpoint(request: ChatRequest):
     Handle chat requests with support for MultiLLM configuration
     """
     try:
-        # Simulate processing time
-        await asyncio.sleep(random.uniform(1, 3))
+        user_query = request.query
         
         # Generate dummy response based on configuration
         if request.multiLLM:

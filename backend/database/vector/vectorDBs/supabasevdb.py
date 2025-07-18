@@ -87,4 +87,63 @@ class SupabaseChunkVectorDB:
                        langauge_filter = None,
                        chunk_type = None,
                        encoder = None):
-        pass
+        if encoder:
+            query_embedding = self.format_embedding(encoder.get_embeddings(sentences = [query])[0])
+            try:
+                result = self.supabase_client.rpc(
+                    "similarity_search_chunks",
+                    {
+                        "query_embedding": query_embedding,
+                        "match_threahold": similarity_threshold,
+                        "match_count": top_k,
+                        "file_filter": None,
+                        "chunk_filter": None, 
+                        "language_filter": langauge_filter,
+                        "chunk_type_filter": chunk_type
+                    }
+                ).execute()
+                return result.data
+            
+            except Exception as e:
+                self.logger.error(f"Error performing the similarity search: {e}")
+                raise
+            
+    
+    def retrieve_images(self, image_urls):
+        bucket_name = IMAGE_STORAGE_FOLDER_PATH.split('/')[0]
+        folder_name = IMAGE_STORAGE_FOLDER_PATH.split('/')[1] 
+        image_base64s = {}
+        for image_url in image_urls:
+            image_basename = os.path.basename(image_url)
+            supabase_path = f"{folder_name}/{image_basename}"
+            image_bytes = self.supabase_client.storage.from_(bucket_name).download(supabase_path)
+            image_base64s[image_url] = base64.b64encode(image_bytes).decode('utf-8')
+        
+        return image_base64s
+    
+    def getChunkByID(self, chunk_id):
+        try:
+            result = self.supabase_client.rpc(
+                "get_chunk_by_id",
+                {
+                    "input_chunk_id": str(chunk_id)
+                }
+            ).execute()
+            return result.data
+        except Exception as e:
+            self.logger.error(f"Error occurred when fetching the chunk of id: {chunk_id}, error: {e}")
+            raise
+    
+    def getChunksByIds(self, chunk_ids):
+        try:
+            result = self.supabase_client.rpc(
+                "get_chunks_by_ids",
+                {
+                    "input_chunks_ids": chunk_ids
+                }
+            ).execute()
+            return result.data
+        except Exception as e:
+            self.logger.error(f"Error occurred when fetching the chunk of ids: {str(chunk_ids)}, error: {e}")
+            raise
+    
