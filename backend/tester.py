@@ -28,10 +28,10 @@ query, top_k = 5,
 
 retriver = Retriever()
 
-reranked_chunks, original_chunks  = retriver.retrieveTopK(query=query, top_k=7, encoder=Encoder(), fetch_chains=True, num_of_neighbors=3)
+reranked_chunks = retriver.retrieveTopK(query=query, top_k=7, encoder=Encoder(), fetch_chains=True, num_of_neighbors=3)
 
-with open("original_data.json", 'w') as f:
-    json.dump(original_chunks, f, indent=4)
+# with open("original_data.json", 'w') as f:
+#     json.dump(original_chunks, f, indent=4)
 
-with open("reranked_data.json", 'w') as f:
+with open("reranked_data_reranked.json", 'w') as f:
     json.dump(reranked_chunks, f, indent=4)

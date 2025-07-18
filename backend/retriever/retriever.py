@@ -3,7 +3,7 @@ from config.settings import *
 from llmservice.llmhelper import LLmHelper
 from utils.logger import Logger
 import copy
-from reranker.reranker import Reranker
+from retriever.reranker.reranker import Reranker
 
 class Retriever:
     
@@ -49,8 +49,8 @@ class Retriever:
         if self.llmhelper_.getTokens(curr_chunk['content']) >= ideal_tokens:
             return curr_chunk
         
-        if "similarity" not in curr_chunk:
-            print("In the rec call not found in the chunk: ", curr_chunk['chunk_id'])
+        # if "similarity" not in curr_chunk:
+            # print("In the rec call not found in the chunk: ", curr_chunk['chunk_id'])
         new_curr_chunk = curr_chunk.copy()
         
         if curr_id in tree and 'prev' in tree[curr_id]:
@@ -70,32 +70,12 @@ class Retriever:
                 return self.recursiveCombine(curr_chunk=new_curr_chunk, curr_id=next_id,
                                              tree = tree, ideal_tokens=ideal_tokens, chunk_look_up=chunk_look_up)
 
-        return new_curr_chunk
-        
-        # prev_node = None
-        # next_node = None
-        # if 'prev' in tree[curr_id]:
-        #     prev_node = chunk_look_up[tree[curr_id]['prev']]
-        #     new_curr_chunk = self.combineTwoChunks(curr_chunk, prev_node, prev_flag=True)
-        
-        # if 'next' in tree[curr_id]:
-        #     next_node = chunk_look_up[tree[curr_id]['next']]
-        #     new_curr_chunk = self.combineTwoChunks(curr_chunk, next_node, prev_flag=False)
-        
-        # if prev_node:
-        #     return self.recursiveCombine(curr_chunk=new_curr_chunk, curr_id=prev_node['chunk_id'], 
-        #                                  tree = tree, ideal_tokens=ideal_tokens, 
-        #                                  chunk_look_up=chunk_look_up)
-        # if next_node:
-        #     return self.recursiveCombine(curr_chunk=new_curr_chunk, curr_id=next_node['chunk_id'],
-        #                                  tree=tree, ideal_tokens=ideal_tokens, 
-        #                                  chunk_look_up=chunk_look_up)
-        
+        return new_curr_chunk        
         
     def combineChunks(self, tree, root_node_ids, chunk_look_up, ideal_chunk_tokens):
         final_chunks = []
         processed_chunks = set()
-        print("Root ids: ", root_node_ids)
+        # print("Root ids: ", root_node_ids)
         for root_node in root_node_ids:
             if root_node in processed_chunks:
                 continue
@@ -106,8 +86,8 @@ class Retriever:
                                                   tree = tree,
                                                   ideal_tokens=ideal_chunk_tokens,
                                                   chunk_look_up=chunk_look_up)
-                if "similarity" not in new_chunk:
-                    print("Not found in the chunk: ", new_chunk['chunk_id'])
+                # if "similarity" not in new_chunk:
+                #     print("Not found in the chunk: ", new_chunk['chunk_id'])
                 final_chunks.append(new_chunk)
                 processed_chunks.add(root_node)
         
@@ -150,9 +130,9 @@ class Retriever:
                     chunks_to_fetch.append(next_c)
             
             if chunks_to_fetch:
-                print("Ids to fetch: ", chunks_to_fetch)
+                # print("Ids to fetch: ", chunks_to_fetch)
                 curr_chunks = self.fetchChunksByIds(chunk_ids= chunks_to_fetch)
-                print("Fetched total: ", len(curr_chunks), "Neighbors: ", num_of_neighbors)
+                # print("Fetched total: ", len(curr_chunks), "Neighbors: ", num_of_neighbors)
                 for chunk in curr_chunks:
                     if chunk['chunk_id'] in chunk_look_up:
                         chunk_look_up[chunk['chunk_id']] = chunk
@@ -164,19 +144,12 @@ class Retriever:
         return self.combineChunks(tree=tree, root_node_ids=root_ids, 
                                   chunk_look_up=chunk_look_up, ideal_chunk_tokens=ideal_chunk_tokens)
     
-    def reRankChunks(self, retrieved_chunks):
-        return self.reranker.rerank(retrieved_chunks=retrieved_chunks)
+    def reRankChunks(self, query, retrieved_chunks, importance_dict):
+        return self.reranker.rerank(query = query, retrieved_chunks=retrieved_chunks, importance_dict=importance_dict)
     
     def retrieveImages(self, retrieved_chunks):
         image_urls = set()
         for obj in retrieved_chunks:
-            # print("Keys: ", obj['media_ref'].keys())
-            # print("Type: ", type(obj['media_ref']))
-            if type(obj['media_ref']) == list:
-                print("What is this?????")
-                print(obj['chunk_id'])
-                print(obj['media_ref'])
-            # print(obj['media_ref']['images'])
             if obj['media_ref']['images'] != []:
                 for image_obj in obj['media_ref']['images']:
                     image_urls.add(image_obj['image_url'])
@@ -199,7 +172,7 @@ class Retriever:
                                                          chunk_type=chunk_type,
                                                          encoder=encoder)
         
-        original_chunks = retrieved_chunks.copy()
+        # original_chunks = retrieved_chunks.copy()
         
         if fetch_chains:
             retrieved_chunks = self.fetchChains(retrieved_chunks=retrieved_chunks, 
@@ -207,6 +180,6 @@ class Retriever:
                                                 top_k=top_k)
         
         retrieved_images_dict = self.retrieveImages(retrieved_chunks = retrieved_chunks)
-        reranked_chunks = self.reRankChunks(retrieved_chunks)
+        reranked_chunks = self.reRankChunks(query = query, retrieved_chunks=retrieved_chunks, importance_dict = RERANKING_PARAMETERS_PERCENT)
         
-        return reranked_chunks, original_chunks
+        return reranked_chunks
