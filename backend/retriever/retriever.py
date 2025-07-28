@@ -159,13 +159,13 @@ class Retriever:
             
         return image_base64_dict
     
-    def retrieveTopK(self, query, file_filter = {}, top_k = TOP_K,
+    def retrieveTopK(self, query, file_filter = {}, top_k = TOP_K, similarity_threshold=SIMILARITY_TH,
                        chunk_filer = {}, language_filter = None, 
                        chunk_type = None, encoder = None, fetch_chains = False, num_of_neighbors = 0):
                 
         retrieved_chunks = self.vectordb.retrieve_chunks(query=query,
                                                          top_k=top_k,
-                                                         similarity_threshold=SIMILARITY_TH,
+                                                         similarity_threshold=similarity_threshold,
                                                          file_filter=file_filter,
                                                          langauge_filter=language_filter,
                                                          chunk_filter=chunk_filer,
@@ -182,4 +182,4 @@ class Retriever:
         retrieved_images_dict = self.retrieveImages(retrieved_chunks = retrieved_chunks)
         reranked_chunks = self.reRankChunks(query = query, retrieved_chunks=retrieved_chunks, importance_dict = RERANKING_PARAMETERS_PERCENT)
         
-        return reranked_chunks
+        return reranked_chunks, retrieved_images_dict

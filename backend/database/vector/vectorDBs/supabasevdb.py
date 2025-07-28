@@ -116,8 +116,9 @@ class SupabaseChunkVectorDB:
         for image_url in image_urls:
             image_basename = os.path.basename(image_url)
             supabase_path = f"{folder_name}/{image_basename}"
+            extension = image_basename.split('.')[1]
             image_bytes = self.supabase_client.storage.from_(bucket_name).download(supabase_path)
-            image_base64s[image_url] = base64.b64encode(image_bytes).decode('utf-8')
+            image_base64s[image_basename.replace('.'+extension, '')] = base64.b64encode(image_bytes).decode('utf-8')
         
         return image_base64s
     

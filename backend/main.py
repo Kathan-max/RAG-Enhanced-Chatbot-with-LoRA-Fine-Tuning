@@ -1,7 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import os
 import tempfile
 import base64
@@ -13,6 +13,10 @@ from ingestion.ingestion import Ingestaion
 from embedding.encoder import Encoder
 from config.settings import *
 from retriever.retriever import Retriever
+# from llmservice.llmservice import LLMService
+from llmservice.multillmorchestrator import MultiLLMOrchestrator
+from llmservice.llmmodels import ProcessingMode
+from utils.logger import Logger
 
 app = FastAPI(title="LLM Chat Application API", version="1.0.0")
 
@@ -29,12 +33,16 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     query: str
     multiLLM: bool
+    fetchChains: bool
+    noOfNeighbours: int
     activeLLMs: List[str] = []
     expertLLM: Optional[str] = None
+    chainOfThought: bool
 
 class ChatResponse(BaseModel):
     response: str
-    images: List[str] = []
+    reasoning: str
+    images: Dict[str, str] = {}
 
 # Dummy vector database storage (in production, use a real vector database)
 # vector_db = {
@@ -43,55 +51,70 @@ class ChatResponse(BaseModel):
 #     "documents": []
 # }
 load_dotenv(".env")
-
+encoder = Encoder(encoder_name = os.getenv("ENCODER_NAME"), model_name = os.getenv("ENCODING_MODEL"))
 ingestion_obj = Ingestaion(parser = os.getenv("PARSER"),
                  chunker = os.getenv("CHUNKER"),
-                 encoder = Encoder(encoder_name = os.getenv("ENCODER_NAME"),
-                                   model_name = os.getenv("ENCODING_MODEL")))
-# retriever = 
+                 encoder = encoder)
+# llmserviceObj = LLMService()
+llmserviceObj = MultiLLMOrchestrator()
+retriever = Retriever()
+logger = Logger(name="RAGLogger").get_logger()
 
 @app.get("/")
 async def root():
     return {"message": "LLM Chat Application API is running"}
 
-"""
-class ChatRequest(BaseModel):
-    query: str
-    multiLLM: bool
-    activeLLMs: List[str] = []
-    expertLLM: Optional[str] = None
-"""
+def filter_image_dict(image_dict, image_ids_lst):
+    final_image_dict = {image_id: image_dict[image_id] for image_id in image_ids_lst}
+    return final_image_dict
+
+def getContextText(retieved_chunks):
+    return "\n\n".join([f"Context {i+1}: {chunk['content']}" for i, chunk in enumerate(retieved_chunks)])
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     """
     Handle chat requests with support for MultiLLM configuration
     """
-    try:
-        user_query = request.query
-        
-        # Generate dummy response based on configuration
-        if request.multiLLM:
-            response = f"[MultiLLM Response] Processing your query: '{request.query}' with {len(request.activeLLMs)} active LLMs"
-            if request.expertLLM:
-                response += f" and expert model: {request.expertLLM}"
-            response += f"\n\nActive LLMs: {', '.join(request.activeLLMs)}"
-            response += "\n\nThis is a comprehensive response utilizing multiple AI models to provide you with the best possible answer."
-        else:
-            response = f"[Standard Response] Thank you for your query: '{request.query}'. This is a standard single-model response."
-        
-        # Simulate image generation for some queries
-        images = []
-        if "image" in request.query.lower() or "picture" in request.query.lower() or "draw" in request.query.lower():
-            # Generate dummy base64 image data (1x1 pixel PNG)
-            dummy_image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-            images.append(dummy_image)
-            response += "\n\nHere's your generated image: <img-0>"
-        
-        return ChatResponse(response=response, images=images)
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
+    # try:
+    user_query = request.query
+    print("Received the query: ", user_query)
+    retrieved_chunks, image_dicts = retriever.retrieveTopK(query=user_query, top_k=TOP_K, encoder=encoder, 
+                                                           similarity_threshold = SIMILARITY_TH, fetch_chains=request.fetchChains, 
+                                                           num_of_neighbors=request.noOfNeighbours)
+    
+    # self, user_query, retieved_chunks, masterLLM, temp = DEFAULT_TEMPERATURE, use_multLLM = False
+    context_text = getContextText(retieved_chunks)
+    # llmresponse = llmserviceObj.masterLLMProcessing(user_query=user_query, retieved_chunks=retrieved_chunks, 
+    #                                                 masterLLM=request.expertLLM, temp=DEFAULT_TEMPERATURE, 
+    #                                                 use_multLLM = request.multiLLM, active_llm = request.activeLLMs)
+    """
+    class ChatRequest(BaseModel):
+        query: str
+    multiLLM: bool
+    fetchChains: bool
+    noOfNeighbours: int
+    activeLLMs: List[str] = []
+    expertLLM: Optional[str] = None
+    """
+    if request.chainOfThought:
+        processing_mode = ProcessingMode.CHAIN_OF_THOUGHTS
+    elif request.multiLLM:
+        processing_mode = ProcessingMode.MULTI_LLM_JURY
+    else:
+        processing_mode = ProcessingMode.SINGLE_LLM
+    
+    llmresponse_obj = llmserviceObj.process_query(user_query=user_query, context_text= context_text,
+                                                  processing_mode=processing_mode, max_iterations = DEFAULT_THINKING_ITERATIONS)
+    
+    print("LLM response: ", llmresponse)
+    answer = llmresponse.get('answer', "Was not able to fetch correct output.")
+    reasoning = llmresponse.get('reasoning', 'No output...')
+    final_image_dict = filter_image_dict(image_dict=image_dicts, image_ids_lst=llmresponse.get('relevant_image_tags', []))
+    
+    return ChatResponse(response=answer, reasoning=reasoning, images=final_image_dict)
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
 
 @app.post("/api/upload")
 async def upload_documents(
