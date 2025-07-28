@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, Upload, Database, Send, X, FileText, CheckCircle, Loader, Zap, Brain, Sparkles } from 'lucide-react';
+import { MessageCircle, Upload, Database, Send, X, FileText, CheckCircle, Loader, Zap, Brain, Sparkles, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
 
 const App = () => {
   const [activePanel, setActivePanel] = useState('chat');
@@ -9,6 +9,7 @@ const App = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [trainModel, setTrainModel] = useState(false);
+  const [expandedReasoning, setExpandedReasoning] = useState({}); // Track which reasoning sections are expanded
   
   // LLM Configuration States
   const [useMultiLLM, setUseMultiLLM] = useState(false);
@@ -19,18 +20,35 @@ const App = () => {
   const messagesEndRef = useRef(null);
 
   const availableLLMs = [
-    'GPT-4',
-    'Claude-3',
+    'gpt-3',
+    'gpt-3.5-turbo',
+    'gpt-3.5-turbo-16k',
+    'gpt-4o',
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-4-32k',
+    'Claude 2',
+    'Claude Instant 2',
+    'Claude 3',
     'Gemini-Pro',
     'Llama-2',
     'Mistral-7B'
   ];
 
   const expertLLMOptions = [
-    'GPT-4-Expert',
-    'Claude-3-Expert',
-    'Gemini-Pro-Expert',
-    'Custom-Expert'
+    'gpt-3',
+    'gpt-3.5-turbo',
+    'gpt-3.5-turbo-16k',
+    'gpt-4o',
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-4-32k',
+    'Claude 2',
+    'Claude Instant 2',
+    'Claude 3',
+    'Gemini-Pro',
+    'Llama-2',
+    'Mistral-7B'
   ];
 
   const scrollToBottom = () => {
@@ -40,6 +58,13 @@ const App = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const toggleReasoning = (messageIndex) => {
+    setExpandedReasoning(prev => ({
+      ...prev,
+      [messageIndex]: !prev[messageIndex]
+    }));
+  };
 
   const handleLLMToggle = (llm) => {
     setActiveLLMs(prev => 
@@ -62,7 +87,9 @@ const App = () => {
         query: inputMessage,
         multiLLM: useMultiLLM,
         activeLLMs: useMultiLLM ? activeLLMs : [],
-        expertLLM: useMultiLLM ? expertLLM : null
+        expertLLM: useMultiLLM ? expertLLM : "gpt-4",
+        fetchChains: false,
+        noOfNeighbours: 0  
       };
 
       const response = await fetch('/api/chat', {
@@ -73,29 +100,52 @@ const App = () => {
         body: JSON.stringify(payload),
       });
 
+      if(!response.ok){
+        const errorText = await response.text();
+        console.error("Error response: ", errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
       const data = await response.json();
       
       // Process images in the response
       let processedContent = data.response;
-      if (data.images && data.images.length > 0) {
-        data.images.forEach((imageBase64, index) => {
-          const imageTag = `<img-${index}>`;
-          const imgElement = `<img src="data:image/png;base64,${imageBase64}" alt="Generated Image" style="max-width: 100%; height: auto; border-radius: 12px; margin: 8px 0; border: 2px solid #00ffff;" />`;
-          processedContent = processedContent.replace(imageTag, imgElement);
+      let hasImages = false;
+
+      if (data.images && Object.keys(data.images).length > 0) {
+        
+        const imageTagRegex = /<image_id>(.*?)<\/image_id>/g;
+
+        processedContent = processedContent.replace(imageTagRegex, (match, imageId) => {
+          if (data.images[imageId]){
+            hasImages = true;
+            return `<img src="data:image/png;base64,${data.images[imageId]}" alt="Retrieved Image" style="max-width: 100%; height: auto; border-radius: 12px; margin: 8px 0; border: 2px solid #00ffff; display: block;" />`;
+          } else {
+            console.warn(`Image with ID "${imageId}" not found in response`);
+            return `<div style="padding: 8px; margin: 8px 0; background-color: #333; border: 1px solid #666; border-radius: 8px; color: #ccc; text-align: center;">Image not found: ${imageId}</div>`;
+          }
         });
+
+        // data.images.forEach((imageBase64, index) => {
+        //   const imageTag = `<img-${index}>`;
+        //   const imgElement = `<img src="data:image/png;base64,${imageBase64}" alt="Generated Image" style="max-width: 100%; height: auto; border-radius: 12px; margin: 8px 0; border: 2px solid #00ffff;" />`;
+        //   processedContent = processedContent.replace(imageTag, imgElement);
+        // });
       }
 
       const assistantMessage = { 
         role: 'assistant', 
         content: processedContent,
-        isHtml: data.images && data.images.length > 0
+        reasoning: data.reasoning || '',
+        isHtml: hasImages
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage = { 
         role: 'assistant', 
-        content: 'Sorry, there was an error processing your request.' 
+        content: `Sorry, there was an error processing your request: ${error.message}`,
+        reasoning: '' 
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -295,18 +345,59 @@ const App = () => {
         ) : (
           messages.map((message, index) => (
             <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-slideIn`}>
-              <div className={`max-w-[75%] p-4 rounded-2xl relative overflow-hidden ${
-                message.role === 'user' 
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30' 
-                  : 'bg-gray-800 text-gray-100 border border-gray-700 shadow-lg shadow-cyan-500/20'
+              <div className={`max-w-[75%] relative ${
+                message.role === 'user' ? 'space-y-0' : 'space-y-3'
               }`}>
-                {message.role === 'assistant' && (
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-purple-500"></div>
-                )}
-                {message.isHtml ? (
-                  <div dangerouslySetInnerHTML={{ __html: message.content }} />
-                ) : (
-                  <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                {/* Main message content */}
+                <div className={`p-4 rounded-2xl relative overflow-hidden ${
+                  message.role === 'user' 
+                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30' 
+                    : 'bg-gray-800 text-gray-100 border border-gray-700 shadow-lg shadow-cyan-500/20'
+                }`}>
+                  {message.role === 'assistant' && (
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-purple-500"></div>
+                  )}
+                  {message.isHtml ? (
+                    <div 
+                      dangerouslySetInnerHTML={{ __html: message.content }}
+                      className="prose prose-invert max-w-none"
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                  )}
+                </div>
+
+                {/* Reasoning section - only for assistant messages */}
+                {message.role === 'assistant' && message.reasoning && (
+                  <div className="space-y-2">
+                    {/* Reasoning toggle button */}
+                    <button
+                      onClick={() => toggleReasoning(index)}
+                      className="flex items-center space-x-2 px-3 py-2 bg-gray-800/50 hover:bg-gray-700/50 border border-gray-600/50 rounded-lg transition-all duration-200 text-gray-300 hover:text-cyan-300 text-sm backdrop-blur-sm"
+                    >
+                      <Brain size={16} className="text-cyan-400" />
+                      <span>AI Reasoning</span>
+                      <div className="flex items-center space-x-1 text-xs text-gray-400">
+                        {expandedReasoning[index] ? <EyeOff size={14} /> : <Eye size={14} />}
+                        {expandedReasoning[index] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </div>
+                    </button>
+
+                    {/* Expandable reasoning content */}
+                    <div className={`transition-all duration-300 overflow-hidden ${
+                      expandedReasoning[index] ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                    }`}>
+                      <div className="bg-gray-900/50 border border-cyan-500/20 rounded-lg p-4 backdrop-blur-sm">
+                        <div className="flex items-center space-x-2 mb-3">
+                          <Brain size={18} className="text-cyan-400" />
+                          <h4 className="text-cyan-300 font-medium">Thought Process</h4>
+                        </div>
+                        <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar">
+                          {message.reasoning}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
