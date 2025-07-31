@@ -8,7 +8,7 @@ from llmservice.prompts import PROMPTS
 # from prompts import PROMPTS
 from llmservice.adaptiveJsonExtractor import AdaptiveJsonExtractor
 # from adaptiveJsonExtractor import AdaptiveJsonExtractor
-from prompts import PROMPTS
+from llmservice.prompts import PROMPTS
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.agents import Tool, AgentExecutor, create_react_agent
@@ -163,8 +163,10 @@ Thought: {agent_scratchpad}
                 self.logger.error(f"Json parsing error: {e}")
                 raise
             
-            jury_providers = ["gemini", "openai"]
-            jury_models = ["gemini-pro", "gpt-4o"]
+            # jury_providers = ["gemini", "openai"]
+            # jury_models = ["gemini-pro", "gpt-4o"]
+            jury_providers = ["openai"]
+            jury_models = ["gpt-4o", "gpt-3.5-turbo", "gpt-3", "gpt-4"]
             
             provider = jury_providers[iteration % len(jury_providers)] # circular indexing
             model = jury_models[iteration % len(jury_models)]

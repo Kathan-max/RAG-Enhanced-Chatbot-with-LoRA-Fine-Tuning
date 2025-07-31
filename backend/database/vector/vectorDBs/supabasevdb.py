@@ -148,3 +148,121 @@ class SupabaseChunkVectorDB:
             self.logger.error(f"Error occurred when fetching the chunk of ids: {str(chunk_ids)}, error: {e}")
             raise
     
+    def get_vector_db_statistics(self):
+        """
+        Get comprehensive vector database statistics
+        """
+        try:
+            stats = {}
+            
+            # Get total number of chunks/vectors
+            total_chunks_result = self.supabase_client.table("chunks").select("chunk_id", count="exact").execute()
+            stats['total_vectors'] = total_chunks_result.count if total_chunks_result.count is not None else 0
+            
+            # Get unique files count
+            unique_files_result = self.supabase_client.rpc("get_unique_files_count").execute()
+            stats['total_documents'] = unique_files_result.data[0]['count'] if unique_files_result.data else 0
+            
+            # Get embedding dimensions (assuming all embeddings have same dimension)
+            if stats['total_vectors'] > 0:
+                sample_embedding_result = self.supabase_client.table("chunks").select("embedding").limit(1).execute()
+                if sample_embedding_result.data:
+                    sample_embedding = sample_embedding_result.data[0]['embedding']
+                    if isinstance(sample_embedding, str):
+                        # Parse the string representation of the list
+                        import ast
+                        embedding_list = ast.literal_eval(sample_embedding)
+                        stats['embedding_dimensions'] = len(embedding_list)
+                    elif isinstance(sample_embedding, list):
+                        stats['embedding_dimensions'] = len(sample_embedding)
+                    else:
+                        stats['embedding_dimensions'] = 0
+                else:
+                    stats['embedding_dimensions'] = 0
+            else:
+                stats['embedding_dimensions'] = 0
+            
+            # Get similarity algorithm info
+            stats['similarity_algorithm'] = "Cosine Similarity"  # Default for most vector DBs
+            stats['vector_index_type'] = "HNSW"  # Hierarchical Navigable Small World
+            
+            # Get chunk type distribution
+            chunk_types_result = self.supabase_client.rpc("get_chunk_type_distribution").execute()
+            if chunk_types_result.data:
+                stats['chunk_type_distribution'] = {item['chunk_type']: item['count'] for item in chunk_types_result.data}
+            else:
+                stats['chunk_type_distribution'] = {}
+            
+            # Get language distribution
+            language_dist_result = self.supabase_client.rpc("get_language_distribution").execute()
+            if language_dist_result.data:
+                stats['language_distribution'] = {item['language']: item['count'] for item in language_dist_result.data}
+            else:
+                stats['language_distribution'] = {}
+            
+            # Get file type distribution
+            file_types_result = self.supabase_client.rpc("get_file_type_distribution").execute()
+            if file_types_result.data:
+                stats['file_type_distribution'] = {item['file_type']: item['count'] for item in file_types_result.data}
+            else:
+                stats['file_type_distribution'] = {}
+            
+            # Get storage size estimation (approximate)
+            stats['estimated_storage_mb'] = round((stats['total_vectors'] * stats['embedding_dimensions'] * 4) / (1024 * 1024), 2)  # 4 bytes per float
+            
+            # Database health metrics
+            stats['database_status'] = "healthy"
+            stats['last_updated'] = self._get_last_update_timestamp()
+            
+            self.logger.info(f"Retrieved vector DB statistics: {stats['total_vectors']} vectors, {stats['total_documents']} documents")
+            return stats
+            
+        except Exception as e:
+            self.logger.error(f"Error retrieving vector DB statistics: {e}")
+            # Return default stats in case of error
+            return {
+                'total_vectors': 0,
+                'total_documents': 0,
+                'embedding_dimensions': 0,
+                'similarity_algorithm': 'Cosine Similarity',
+                'vector_index_type': 'HNSW',
+                'chunk_type_distribution': {},
+                'language_distribution': {},
+                'file_type_distribution': {},
+                'estimated_storage_mb': 0.0,
+                'database_status': 'error',
+                'last_updated': None,
+                'error': str(e)
+            }
+    
+    def _get_last_update_timestamp(self):
+        """Get the timestamp of the most recently added chunk"""
+        try:
+            result = self.supabase_client.table("chunks").select("created_at").order("created_at", desc=True).limit(1).execute()
+            if result.data:
+                return result.data[0]['created_at']
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting last update timestamp: {e}")
+            return None
+    
+    def get_search_performance_stats(self):
+        """Get search performance statistics"""
+        try:
+            # This would require storing search metrics in a separate table
+            # For now, return placeholder data
+            return {
+                'average_search_time_ms': 0,
+                'total_searches': 0,
+                'cache_hit_rate': 0,
+                'most_common_queries': []
+            }
+        except Exception as e:
+            self.logger.error(f"Error retrieving search performance stats: {e}")
+            return {
+                'average_search_time_ms': 0,
+                'total_searches': 0,
+                'cache_hit_rate': 0,
+                'most_common_queries': [],
+                'error': str(e)
+            }

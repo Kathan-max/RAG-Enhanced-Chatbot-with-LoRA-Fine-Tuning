@@ -6,6 +6,7 @@ class VectorDB:
     
     def __init__(self, **kwargs):
         self.supabase = SupabaseChunkVectorDB()
+        self.logger = Logger(name="RAGLogger").get_logger()
     
     def upload_images(self, image_objs):
         return self.supabase.upload_images(image_objs)
@@ -52,3 +53,78 @@ class VectorDB:
 
     def getChunksByID(self, chunk_ids):
         return self.supabase.getChunksByIds(chunk_ids = chunk_ids)
+
+    def get_analytics_data(self):
+        """
+        Get comprehensive analytics data for the vector database
+        """
+        try:
+            # Get basic vector DB statistics
+            vector_stats = self.supabase.get_vector_db_statistics()
+            
+            # Get search performance stats
+            search_stats = self.supabase.get_search_performance_stats()
+            
+            # Combine all analytics data
+            analytics_data = {
+                'vector_database': vector_stats,
+                'search_performance': search_stats,
+                'system_info': {
+                    'database_type': 'Supabase Vector DB',
+                    'connection_status': 'connected' if self.supabase.supabase_client else 'disconnected',
+                    'api_version': '1.0',
+                }
+            }
+            
+            self.logger.info("Retrieved comprehensive analytics data")
+            return analytics_data
+            
+        except Exception as e:
+            self.logger.error(f"Error retrieving analytics data: {e}")
+            return {
+                'vector_database': {
+                    'total_vectors': 0,
+                    'total_documents': 0,
+                    'embedding_dimensions': 0,
+                    'similarity_algorithm': 'Unknown',
+                    'database_status': 'error',
+                    'error': str(e)
+                },
+                'search_performance': {
+                    'average_search_time_ms': 0,
+                    'total_searches': 0,
+                    'error': str(e)
+                },
+                'system_info': {
+                    'database_type': 'Supabase Vector DB',
+                    'connection_status': 'error',
+                    'api_version': '1.0',
+                    'error': str(e)
+                }
+            }
+    
+    def get_simple_stats(self):
+        """
+        Get simplified statistics for quick display
+        """
+        try:
+            stats = self.supabase.get_vector_db_statistics()
+            return {
+                'total_vectors': stats.get('total_vectors', 0),
+                'total_documents': stats.get('total_documents', 0),
+                'embedding_dimensions': stats.get('embedding_dimensions', 0),
+                'similarity_algorithm': stats.get('similarity_algorithm', 'Cosine Similarity'),
+                'database_status': stats.get('database_status', 'unknown'),
+                'storage_size_mb': stats.get('estimated_storage_mb', 0.0)
+            }
+        except Exception as e:
+            self.logger.error(f"Error retrieving simple stats: {e}")
+            return {
+                'total_vectors': 0,
+                'total_documents': 0,
+                'embedding_dimensions': 0,
+                'similarity_algorithm': 'Unknown',
+                'database_status': 'error',
+                'storage_size_mb': 0.0,
+                'error': str(e)
+            }

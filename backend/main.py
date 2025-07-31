@@ -15,8 +15,10 @@ from config.settings import *
 from retriever.retriever import Retriever
 # from llmservice.llmservice import LLMService
 from llmservice.multillmorchestrator import MultiLLMOrchestrator
+from llmservice.adaptiveJsonExtractor import AdaptiveJsonExtractor
 from llmservice.llmmodels import ProcessingMode
 from utils.logger import Logger
+from database.vector.vectorDB import VectorDB
 
 app = FastAPI(title="LLM Chat Application API", version="1.0.0")
 
@@ -42,6 +44,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     reasoning: str
+    miscellaneous: dict = {}
     images: Dict[str, str] = {}
 
 # Dummy vector database storage (in production, use a real vector database)
@@ -57,8 +60,10 @@ ingestion_obj = Ingestaion(parser = os.getenv("PARSER"),
                  encoder = encoder)
 # llmserviceObj = LLMService()
 llmserviceObj = MultiLLMOrchestrator()
+json_extractor = AdaptiveJsonExtractor()
 retriever = Retriever()
 logger = Logger(name="RAGLogger").get_logger()
+vectordb = VectorDB()
 
 @app.get("/")
 async def root():
@@ -71,8 +76,121 @@ def filter_image_dict(image_dict, image_ids_lst):
 def getContextText(retieved_chunks):
     return "\n\n".join([f"Context {i+1}: {chunk['content']}" for i, chunk in enumerate(retieved_chunks)])
 
+"""
+class ChatResponse(BaseModel):
+    response: str
+    reasoning: str
+    miscellaneous: Dict[str, str] = {}
+    images: Dict[str, str] = {}
+"""
+
+def validate_obj(reqKeys,obj):
+    for key in reqKeys:
+        if key not in obj:
+            return False
+    
+    return True
+
+def format_data(data):
+    return {
+        "answer": data['answer'],
+        "reasoning": data['reasoning'],
+        "relevant_image_tags": data["relevant_image_tags"],
+        "miscellaneous": {}
+    }
+
+def invalide_data():
+    return {
+        "answer": "We were unable to process the current request please try again later...", 
+        "reasoning": "",
+        "relevant_image_tags": [],
+        "miscellaneous": {}
+    }
+
+def correct_validate_final_response(llmresponse_obj, processing_mode):
+    print("llmresponse_obj: ", llmresponse_obj)
+    if 'final_response' not in llmresponse_obj:
+        print(f"Error while validating the final_response: {llmresponse_obj} has no final_response obj.")
+    
+    final_response = llmresponse_obj['final_response']
+    if processing_mode == ProcessingMode.SINGLE_LLM:
+        data = json_extractor.extract_orchestrator_json_block(text = final_response)
+        validation = validate_obj(['answer', 'reasoning', 'relevant_image_tags'], data)
+        if validation:
+            return format_data(data)
+            
+        else:
+            return invalide_data()
+            
+    elif processing_mode == ProcessingMode.CHAIN_OF_THOUGHTS:
+        iterations = llmresponse_obj['iterations']
+        miscellaneous_dict = {
+            "iteration_info":[]
+        }
+        combined_reasoning = ""
+        image_tags = []
+        for ite in iterations:
+            ite_no = ite['iteration']
+            ite_dict = json_extractor.extract_orchestrator_json_block(text=ite['response'])
+            miscellaneous_dict['iteration_info'].append({
+                "improved_answer": f"Iteration: {ite_no}, {ite_dict['improved_answer']}",
+                "improvement_strategy": ite_dict['improvement_strategy'],
+                "iteration_summary": ite_dict['iteration_summary'],
+                "confidence_score": ite_dict['confidence_score']
+            })
+            combined_reasoning += "\n" + "iteration: " + str(ite_no) + str(ite_dict['reasoning'])
+            image_tags += ite_dict['relevant_image_tags']
+        data = {}
+        if "```json" in final_response:
+            data = json_extractor.extract_orchestrator_json_block(final_response)
+            data['relevant_image_tags'] += image_tags
+            data['relevant_image_tags'] = list(set(data['relevant_image_tags']))
+        else:
+            data = {
+                "answer": final_response,
+                "reasoning": combined_reasoning,
+                "relevant_image_tags": set(image_tags),
+            }
+        
+        data["miscellaneous"] = miscellaneous_dict
+        validation = validate_obj(['answer', 'reasoning', 'relevant_image_tags'], data)
+        if validation:
+            return format_data(data)
+        else:
+            return invalide_data()
+    else:  # MULTI_LLM_JURY mode
+        print("Multi LLM Response:")
+        if "Error" in final_response:
+            print("Jury responses were empty, using master_initial if available.")
+            if "master_initial" in llmresponse_obj:
+                master_response_dict = json_extractor.extract_orchestrator_json_block(text=llmresponse_obj["master_initial"])
+                return {
+                    "answer": master_response_dict.get("answer", "No valid answer."),
+                    "reasoning": master_response_dict.get("reasoning", ""),
+                    "relevant_image_tags": master_response_dict.get("relevant_image_tags", []),
+                    "miscellaneous": {"note": "Fallback to master initial due to jury failure"}
+                }
+            else:
+                return {
+                    "answer": "No valid answer generated.",
+                    "reasoning": "Master and jury both failed.",
+                    "relevant_image_tags": [],
+                    "miscellaneous": {}
+                }
+        else:
+            final_dict = json_extractor.extract_orchestrator_json_block(text=llmresponse_obj["final_response"])
+            return {
+                "answer": final_dict.get("answer", "No valid answer."),
+                "reasoning": final_dict.get("reasoning", ""),
+                "relevant_image_tags": final_dict.get("relevant_image_tags", []),
+                "miscellaneous": {"note": "Processed via jury-enhanced response"}
+            }
+                
+        
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
+    print("Request Received: ",request)
     """
     Handle chat requests with support for MultiLLM configuration
     """
@@ -84,7 +202,7 @@ async def chat_endpoint(request: ChatRequest):
                                                            num_of_neighbors=request.noOfNeighbours)
     
     # self, user_query, retieved_chunks, masterLLM, temp = DEFAULT_TEMPERATURE, use_multLLM = False
-    context_text = getContextText(retieved_chunks)
+    context_text = getContextText(retrieved_chunks)
     # llmresponse = llmserviceObj.masterLLMProcessing(user_query=user_query, retieved_chunks=retrieved_chunks, 
     #                                                 masterLLM=request.expertLLM, temp=DEFAULT_TEMPERATURE, 
     #                                                 use_multLLM = request.multiLLM, active_llm = request.activeLLMs)
@@ -107,12 +225,17 @@ async def chat_endpoint(request: ChatRequest):
     llmresponse_obj = llmserviceObj.process_query(user_query=user_query, context_text= context_text,
                                                   processing_mode=processing_mode, max_iterations = DEFAULT_THINKING_ITERATIONS)
     
-    print("LLM response: ", llmresponse)
-    answer = llmresponse.get('answer', "Was not able to fetch correct output.")
-    reasoning = llmresponse.get('reasoning', 'No output...')
-    final_image_dict = filter_image_dict(image_dict=image_dicts, image_ids_lst=llmresponse.get('relevant_image_tags', []))
+    final_answer_obj = correct_validate_final_response(llmresponse_obj, processing_mode)
     
-    return ChatResponse(response=answer, reasoning=reasoning, images=final_image_dict)
+    print("LLM response: ", final_answer_obj)
+    answer = final_answer_obj.get('answer', "Was not able to fetch correct output.")
+    reasoning = final_answer_obj.get('reasoning', 'No output...')
+    final_image_dict = filter_image_dict(image_dict=image_dicts, image_ids_lst=final_answer_obj.get('relevant_image_tags', []))
+    
+    return ChatResponse(response=final_answer_obj["answer"], 
+                        reasoning=final_answer_obj["reasoning"], 
+                        images=final_image_dict,
+                        miscellaneous = final_answer_obj["miscellaneous"])
     # except Exception as e:
     #     raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
 
@@ -176,24 +299,54 @@ async def upload_documents(
 @app.get("/api/analytics")
 async def get_analytics():
     """
-    Get vector database analytics
+    Get comprehensive vector database analytics
     """
-    try:
-        pass
-        # return {
-        #     "total_vectors": vector_db["total_vectors"],
-        #     "total_documents": vector_db["total_documents"],
-        #     "documents": vector_db["documents"]
-        # }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching analytics: {str(e)}")
+    # try:
+    analytics_data = vectordb.get_analytics_data()
+    return analytics_data
+    # except Exception as e:
+    #     logger.error(f"Error fetching analytics: {e}")
+        # raise HTTPException(status_code=500, detail=f"Error fetching analytics: {str(e)}")
+
+@app.get("/api/analytics/simple")
+async def get_simple_analytics():
+    """
+    Get simplified vector database statistics
+    # """
+    # try:
+    simple_stats = vectordb.get_simple_stats()
+    return simple_stats
+    # except Exception as e:
+    #     logger.error(f"Error fetching simple analytics: {e}")
+        # raise HTTPException(status_code=500, detail=f"Error fetching simple analytics: {str(e)}")
 
 @app.get("/api/health")
 async def health_check():
     """
-    Health check endpoint
+    Enhanced health check endpoint with database status
     """
-    return {"status": "healthy", "message": "API is running properly"}
+    # try:
+        # Basic health check
+    health_status = {"status": "healthy", "message": "API is running properly"}
+    
+    # Add database connectivity check
+    # try:
+    simple_stats = vectordb.get_simple_stats()
+    health_status["database"] = {
+        "status": simple_stats.get("database_status", "unknown"),
+        "total_vectors": simple_stats.get("total_vectors", 0),
+        "connection": "ok" if "error" not in simple_stats else "error"
+    }
+        # except Exception as db_error:
+        #     health_status["database"] = {
+        #         "status": "error",
+        #         "error": str(db_error),
+        #         "connection": "failed"
+        #     }
+        
+    return health_status
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
 
 # Additional endpoints for LLM configuration
 @app.get("/api/llm-models")

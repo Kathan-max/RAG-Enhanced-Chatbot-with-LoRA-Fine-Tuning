@@ -4,21 +4,25 @@ PROMPTS = {
 **CONTEXT HANDLING:**
 - Use provided context passages to answer the user's question accurately
 - Some context may include image tags like: <image_dec><image_id>hash_123</image_id>Description text</image_dec>
-- Include relevant <image_id>hash_123</image_id> tags in your answer where images would help understanding
+- You MUST include relevant <image_id>hash_123</image_id> tags directly in your answer text where images would help understanding
 - Do NOT describe images yourself - only use the provided descriptions
+- When referencing visual information, embed the image tag in the sentence like: "The architecture diagram <image_id>hash_123</image_id> shows..."
 
 **TASK:**
 1. Provide a detailed answer based on context and query
+2. Embed <image_id>hash</image_id> tags directly in your answer where visual content supports your explanation
 
 **OUTPUT FORMAT:**
 ```json
 {{
-  "answer": "<Your complete answer with <image_id>hash</image_id> tags where appropriate>",
+  "answer": "<Your complete answer with <image_id>hash</image_id> tags embedded where appropriate - REQUIRED when images are relevant>",
   "reasoning": "<How you derived this answer from the context>", 
   "relevant_image_tags": ["hash_1", "hash_2"],
   "context_coverage": "<How well the context addresses the query (complete/partial/limited)>"
 }}
 ```
+
+**IMPORTANT:** If you list any hashes in relevant_image_tags, those SAME hashes MUST appear as <image_id>hash</image_id> tags within your answer text.
 
 **CONTEXT:**
 {context_text}
@@ -32,18 +36,20 @@ PROMPTS = {
 **CONTEXT HANDLING:**
 - Use provided context passages to answer the user's question accurately
 - Some context may include image tags like: <image_dec><image_id>hash_123</image_id>Description text</image_dec>
-- Include relevant <image_id>hash_123</image_id> tags in your answer where images would help understanding
+- You MUST include relevant <image_id>hash_123</image_id> tags directly in your answer text where images would help understanding
 - Do NOT describe images yourself - only use the provided descriptions
+- When referencing visual information, embed the image tag in the sentence like: "The architecture diagram <image_id>hash_123</image_id> shows..."
 
 **TASK:**
 1. Provide a comprehensive answer based on context and query
-2. Assess if your answer needs additional LLM review (complexity, uncertainty, multiple perspectives needed)
-3. Rate your confidence in the answer (1-10 scale)
+2. Embed <image_id>hash</image_id> tags directly in your answer where visual content supports your explanation
+3. Assess if your answer needs additional LLM review (complexity, uncertainty, multiple perspectives needed)
+4. Rate your confidence in the answer (1-10 scale)
 
 **OUTPUT FORMAT:**
 ```json
 {{
-  "answer": "<Your complete answer with <image_id>hash</image_id> tags where appropriate>",
+  "answer": "<Your complete answer with <image_id>hash</image_id> tags embedded where appropriate - REQUIRED when images are relevant>",
   "reasoning": "<How you derived this answer from the context>",
   "confidence_score": 8,
   "needs_review": true,
@@ -52,6 +58,8 @@ PROMPTS = {
   "context_coverage": "<How well the context addresses the query (complete/partial/limited)>"
 }}
 ```
+
+**IMPORTANT:** If you list any hashes in relevant_image_tags, those SAME hashes MUST appear as <image_id>hash</image_id> tags within your answer text.
 
 **CONTEXT:**
 {context_text}
@@ -118,20 +126,23 @@ Synthesize all inputs into the best possible final answer, incorporating valuabl
 - Preserve factual accuracy from context
 - Include best insights from each LLM
 - Resolve any contradictions logically
-- Maintain proper image tag placement
+- You MUST include <image_id>hash</image_id> tags directly in your final answer where images support the explanation
+- When referencing visual information, embed the image tag in the sentence like: "The diagram <image_id>hash_123</image_id> illustrates..."
 - Ensure coherent, comprehensive response
 
 **OUTPUT FORMAT:**
 ```json
 {{
-  "final_answer": "<Synthesized answer incorporating best elements from all responses>",
+  "final_answer": "<Synthesized answer with <image_id>hash</image_id> tags embedded where appropriate - REQUIRED when images are relevant>",
   "synthesis_reasoning": "<How you combined different LLM inputs>",
   "confidence_score": 9,
   "key_improvements": ["<What each jury LLM contributed>"],
   "relevant_image_tags": ["hash_1", "hash_2"],
   "context_fidelity": "<How well final answer stays grounded in provided context>"
 }}
-```""",
+```
+
+**IMPORTANT:** If you list any hashes in relevant_image_tags, those SAME hashes MUST appear as <image_id>hash</image_id> tags within your final_answer text.""",
     
 # ----
 # We will use this when this LLM is a Slave and not the Master to add or change the previous output.
@@ -157,14 +168,19 @@ Review the current answer and decide whether to:
 - Factual accuracy against context
 - Completeness of answer
 - Clarity and organization
-- Proper use of image references
+- Proper use of image references (ensure <image_id>hash</image_id> tags are embedded in answer text)
 - Alternative perspectives or insights
+
+**IMAGE TAG REQUIREMENTS:**
+- You MUST include <image_id>hash</image_id> tags directly in your improved answer where images support the explanation
+- When referencing visual information, embed the image tag in the sentence like: "The process shown in <image_id>hash_123</image_id> demonstrates..."
+- If the previous answer missed relevant image tags, add them to your improved version
 
 **OUTPUT FORMAT:**
 ```json
 {{
   "action": "ENHANCE|CORRECT|RESTRUCTURE|VALIDATE",
-  "improved_answer": "<Your enhanced/corrected answer or 'VALIDATED' if no changes needed>",
+  "improved_answer": "<Your enhanced/corrected answer with <image_id>hash</image_id> tags embedded where appropriate, or 'VALIDATED' if no changes needed>",
   "changes_made": ["<List of specific improvements>"],
   "reasoning": "<Why these changes improve the answer>",
   "confidence_score": 8,
@@ -174,8 +190,8 @@ Review the current answer and decide whether to:
 ```
 
 **IMPORTANT:**
+- If you list any hashes in relevant_image_tags, those SAME hashes MUST appear as <image_id>hash</image_id> tags within your improved_answer text
 - If validating, still provide confidence score and reasoning
-- Maintain all relevant image tags from context
 - Don't add information not supported by context
 - Focus on value-add improvements, not minor rewording""",
 
@@ -196,16 +212,22 @@ Review the current answer and decide whether to:
 **TASK:**
 Resolve conflicts by determining which response elements are most accurate according to the provided context.
 
+**IMAGE TAG REQUIREMENTS:**
+- You MUST include <image_id>hash</image_id> tags directly in your resolved answer where images support the explanation
+- When referencing visual information, embed the image tag in the sentence
+
 **OUTPUT FORMAT:**
 ```json
 {{
-  "resolved_answer": "<Answer resolving conflicts using context as ground truth>",
+  "resolved_answer": "<Answer resolving conflicts with <image_id>hash</image_id> tags embedded where appropriate>",
   "conflict_analysis": "<What conflicts existed and how resolved>",
   "confidence_score": 8,
   "context_support": "<How context supports resolution decisions>",
   "relevant_image_tags": ["hash_1", "hash_2"]
 }}
-```""",
+```
+
+**IMPORTANT:** If you list any hashes in relevant_image_tags, those SAME hashes MUST appear as <image_id>hash</image_id> tags within your resolved_answer text.""",
 
         "ContextRelevancePrompt": """You are evaluating the relevance and sufficiency of provided context for answering the user query.
 
@@ -252,6 +274,12 @@ Analyze your previous response and improve it through deeper reasoning, better o
 3. **Clarity**: Is the explanation clear and well-structured?
 4. **Reasoning**: Can I provide better logical flow or deeper analysis?
 5. **Context Usage**: Did I fully utilize all relevant context including images?
+6. **Image Integration**: Are <image_id>hash</image_id> tags properly embedded in the answer text?
+
+**IMAGE TAG REQUIREMENTS:**
+- You MUST include <image_id>hash</image_id> tags directly in your improved answer where images support the explanation
+- When referencing visual information, embed the image tag in the sentence like: "As illustrated in <image_id>hash_123</image_id>, the process..."
+- If your previous response missed relevant image tags, add them to your improved version
 
 **IMPROVEMENT STRATEGIES:**
 - **DEEPEN**: Add more detailed explanations or nuanced understanding
@@ -264,7 +292,7 @@ Analyze your previous response and improve it through deeper reasoning, better o
 **OUTPUT FORMAT:**
 ```json
 {{
-  "improved_answer": "<Your refined and improved answer with <image_id>hash</image_id> tags>",
+  "improved_answer": "<Your refined and improved answer with <image_id>hash</image_id> tags embedded where appropriate>",
   "improvement_strategy": "DEEPEN|RESTRUCTURE|EXPAND|REFINE|VALIDATE|SYNTHESIZE",
   "changes_made": ["<List specific improvements made>"],
   "reasoning": "<Why these changes make the answer better>",
@@ -284,8 +312,8 @@ Analyze your previous response and improve it through deeper reasoning, better o
 - Each iteration should add meaningful value, not just rephrase
 
 **IMPORTANT:**
+- If you list any hashes in relevant_image_tags, those SAME hashes MUST appear as <image_id>hash</image_id> tags within your improved_answer text
 - Always stay grounded in the provided context
-- Maintain all relevant image tags from context
 - Build upon your previous response rather than completely rewriting
 - Be honest about limitations and uncertainty"""
 

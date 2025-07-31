@@ -1,6 +1,6 @@
 from langchain.tools.base import BaseTool
-# from llmservice.llmprovider import LLMProviderTool
-from llmprovider import LLMProviderTool
+from llmservice.llmprovider import LLMProviderTool
+# from llmprovider import LLMProviderTool
 from typing import Dict
 
 class MasterLLMTool(BaseTool):
@@ -69,7 +69,7 @@ class JuryLLMTool(BaseTool):
         self.llm_provider = llm_provider_tool
         self.prompts = prompts
     
-    def _run(self, context_text, user_query, previous_answer, provider, model, temperature):
+    def _run(self, context_text, user_query, previous_answer, provider, model, temperature = 0.1):
         return self.llm_provider._run(
             provider=provider,
             model = model,
